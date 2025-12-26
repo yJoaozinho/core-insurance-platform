@@ -12,6 +12,14 @@ Rather than focusing on user interfaces or superficial functionality, this proje
 
 This repository documents the current progress of the project, including architectural documentation, domain analysis, design decisions, and initial technical foundations.
 
+## How to navigate this repository
+This repository contains:
+
+- `architecture/architecture.md`: detailed architectural overview
+- `architecture/adrs/`: architectural decision records
+- `architecture/diagrams/`: system, context, bounded context, and component diagrams
+- `domain/`: domain definitions and modeling notes
+
 ## 2. Problem Statement
 
 Insurance core systems operate in highly complex and regulated environments. They must handle long-lived business processes, evolving rules, strict auditability requirements, and high expectations around reliability and data consistency. The challenge addressed by this project is to design a core insurance platform capable of supporting essential insurance operations—such as policy lifecycle management, claims processing, and billing—while remaining scalable, maintainable, and adaptable to change over time. 
