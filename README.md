@@ -13,6 +13,12 @@ Rather than focusing on user interfaces or superficial functionality, this proje
 This repository documents the current progress of the project, including architectural documentation, domain analysis, design decisions, and initial technical foundations.
 
 ## How to navigate this repository
+
+### Repository Navigation
+
+- [`architecture/`](architecture/)
+- [`progress/`](progress/)
+
 This repository contains:
 
 - `architecture/architecture.md`: detailed architectural overview
@@ -20,9 +26,10 @@ This repository contains:
 - `architecture/diagrams/`: system, context, bounded context, and component diagrams
 - `domain/`: domain definitions and modeling notes
 
+
 ## 2. Problem Statement
 
-Insurance core systems operate in highly complex and regulated environments. They must handle long-lived business processes, evolving rules, strict auditability requirements, and high expectations around reliability and data consistency. The challenge addressed by this project is to design a core insurance platform capable of supporting essential insurance operations—such as policy lifecycle management, claims processing, and billing—while remaining scalable, maintainable, and adaptable to change over time. 
+Insurance core systems operate in highly complex and regulated environments. They must handle long-lived business processes, evolving rules, strict auditability requirements, and high expectations around reliability and data consistency. The challenge addressed by this project is to design a core insurance platform capable of supporting essential insurance operations—such as policy lifecycle management, claims processing, and billing—while remaining scalable, maintainable, and adaptable to change over time.
 
 ## 3. Domain Understanding
 
@@ -42,13 +49,16 @@ This project focuses on the core concepts commonly found in non-life insurance s
   The Premium is the price paid by the customer in exchange for the coverage provided by the policy. Premium calculation is typically based on risk analysis and pricing rules.
 
 - **Claim**  
-  A Claim represents a request for compensation made by the insured after the occurrence of an insured event (loss). Claims follow a lifecycle with multiple states and validations and are subject to fraud detection and eligibility checks.
+  A Claim represents a request for compensation made by the insured after the occurrence of an insured event (loss). Claims follow a lifecycle with multiple states and validations focused on eligibility and policy compliance.
 
 - **Risk**  
   Risk represents the exposure evaluated by the insurer when pricing and issuing a policy. Risk assessment influences coverage availability, pricing, and acceptance decisions.
 
 - **Billing**  
-  Billing is responsible for managing payments related to policies, including invoicing, payment schedules, and reconciliation.
+  Billing is responsible for managing financial obligations related to policies, including invoicing, payment schedules, and reconciliation. In the current phase, payment execution is delegated to an external payment provider.
+
+- **Payment**  
+  Payment represents the settlement of issued invoices through an external payment gateway. The platform integrates with **Stripe** to handle payment processing, while maintaining internal records for financial traceability.
 
 - **Endorsement**  
   An Endorsement represents a modification to an active policy, such as adding or removing coverages or changing insured information, without invalidating historical data.
@@ -62,9 +72,9 @@ This project focuses on the core concepts commonly found in non-life insurance s
 - Historical data must remain **immutable** once recorded.
 - Business rules are **complex and subject to change**.
 - Regulatory and compliance requirements influence data modeling and system behavior.
+- Fraud detection is intentionally excluded from the current domain scope, as the insurer covers all claim types in this phase.
 
 This domain understanding serves as the foundation for the system’s bounded contexts, aggregates, and architectural decisions described in later sections.
-
 
 ## 4. Functional Scope
 
@@ -82,7 +92,7 @@ The functional scope of this project focuses on the core capabilities expected f
 - **Claims Management**
   - Claim registration linked to a valid policy
   - Claim lifecycle management (submission, validation, approval, rejection, settlement)
-  - Basic fraud indicators and rule-based validations
+  - Eligibility and policy compliance validations
   - Traceability of claim decisions and state changes
 
 - **Risk and Pricing**
@@ -90,10 +100,11 @@ The functional scope of this project focuses on the core capabilities expected f
   - Configurable pricing and rating rules
   - Separation between risk assessment and premium calculation logic
 
-- **Billing**
+- **Billing and Payments**
   - Premium invoicing
   - Payment schedule management
   - Billing state tracking and reconciliation concepts
+  - Integration with **Stripe** for payment processing
 
 - **Auditability and Compliance**
   - Audit logging of critical operations
@@ -106,312 +117,136 @@ The functional scope of this project focuses on the core capabilities expected f
 
 ### Out-of-Scope (Current Phase)
 
-The following aspects are intentionally excluded from the current phase to maintain focus on core domain and architectural concerns:
-
 - User interface implementation
-- External system integrations (payment gateways, third-party fraud services)
+- Advanced fraud detection or fraud scoring systems
+- External fraud analysis services
 - Reporting and analytics dashboards
 - Full regulatory implementation for specific jurisdictions
 
 These elements are considered future extensions and do not impact the validity of the core architectural and domain modeling decisions.
 
-
 ## 5. Non-Functional Requirements
 
-The system is designed to operate in a mission-critical environment where data consistency, traceability, and reliability are fundamental. The following non-functional requirements guide architectural and technical decisions throughout the project.
+The system is designed to operate in a mission-critical environment where data consistency, traceability, and reliability are fundamental.
 
 ### Scalability
-- The system must support growth in the number of policies, claims, and transactions over time.
-- Architectural components should allow horizontal scaling where appropriate.
-- Bounded contexts are designed to evolve independently as load characteristics change.
+- Support growth in policies, claims, and transactions
+- Allow horizontal scaling where appropriate
 
 ### Reliability and Availability
-- The system should remain operational in the presence of partial failures.
-- Critical operations must be resilient to transient errors.
-- Failure scenarios are explicitly considered in workflow design.
+- Remain operational under partial failures
+- Resilient critical operations
 
 ### Data Consistency and Integrity
-- Strong consistency is required for core domain operations such as policy issuance and claim state transitions.
-- Historical data must remain immutable once persisted.
-- Concurrency control mechanisms must prevent invalid state changes.
+- Strong consistency for core domain operations
+- Immutable historical data
+- Concurrency control for state transitions
 
 ### Security
-- Role-based access control (RBAC) is required for all sensitive operations.
-- Authorization rules must be enforced at the application and domain boundaries.
-- Data access should follow the principle of least privilege.
+- Role-based access control (RBAC)
+- Least-privilege data access
 
 ### Auditability and Compliance
-- All critical actions must be traceable to a user or system actor.
-- Audit logs must be immutable and tamper-resistant.
-- Historical states must be reconstructible for regulatory review.
+- Immutable audit logs
+- Reconstructable historical states
 
 ### Observability
-- The system should expose sufficient logging and tracing to support debugging and auditing.
-- Errors and unexpected states must be detectable and diagnosable.
+- Logging and tracing for debugging and auditing
 
 ### Maintainability and Evolution
-- Business rules must be isolated from infrastructure concerns.
-- The system should support incremental evolution without breaking historical behavior.
-- Architectural decisions prioritize clarity and long-term maintainability over short-term convenience.
+- Business rules isolated from infrastructure
+- Safe incremental evolution
 
 ## 6. Architectural Overview
 
-The system is designed using a layered architecture aligned with domain-driven design (DDD) principles. The primary goal is to achieve a clear separation of concerns, allowing the core domain to remain isolated from technical and infrastructural details.
+The system follows a layered architecture aligned with DDD principles.
 
-### High-Level Architecture
-
-At a high level, the system is composed of the following layers:
+### Layers
 
 - **Domain Layer**
-  - Contains the core business logic and rules.
-  - Defines entities, value objects, aggregates, and domain services.
-  - Is independent of frameworks, databases, and external systems.
+  - Core business logic and rules
+  - Framework-agnostic
 
 - **Application Layer**
-  - Orchestrates use cases and business workflows.
-  - Coordinates interactions between domain objects.
-  - Handles transaction boundaries, authorization checks, and idempotency.
+  - Use case orchestration
+  - Transactions and authorization
 
 - **Infrastructure Layer**
-  - Provides technical implementations for persistence, messaging, logging, and security.
-  - Adapts external systems to the interfaces defined by the domain and application layers.
-  - Can be replaced or modified without impacting core business logic.
+  - Persistence, security, logging
+  - External integrations (e.g., Stripe)
 
 ### System Boundaries
 
-The system is designed as a modular monolith in its initial phase, with clear internal boundaries aligned to bounded contexts. This approach allows the system to maintain conceptual integrity while remaining open to future decomposition into microservices if scaling or organizational needs require it.
-
-### Communication Flow
-
-- External clients interact only with the application layer.
-- The application layer invokes domain logic through well-defined interfaces.
-- The domain layer does not depend on infrastructure concerns.
-- Infrastructure components implement interfaces defined by the application or domain layers.
-
-### Architectural Rationale
-
-This architecture was chosen to:
-- Protect the core domain from accidental complexity
-- Enable easier testing and reasoning about business rules
-- Support long-term evolution and refactoring
-- Facilitate scalability and compliance requirements without overengineering
-
+Initially implemented as a modular monolith with clear bounded contexts, allowing future decomposition if required.
 
 ## 7. Domain-Driven Design (DDD)
 
-Domain-driven design (DDD) is applied to this project to manage the inherent complexity of insurance systems by aligning software models closely with business concepts and language.
-
-Rather than treating the domain as a secondary concern, the core business logic is placed at the center of the architecture. This allows the system to evolve alongside changing business rules while minimizing accidental complexity.
-
-### Why DDD
-
-DDD was chosen because the insurance domain:
-- Contains complex, evolving business rules
-- Requires strong consistency and historical integrity
-- Demands clear boundaries between different subdomains
-- Benefits from a shared language between technical and domain perspectives
+DDD is used to align software models with business language and complexity.
 
 ### Bounded Contexts
 
-The system is divided into the following bounded contexts:
-
 - **Policy Management**
-  - Responsible for policy lifecycle, endorsements, renewals, and cancellations.
-  - Owns the Policy aggregate and related business rules.
-
-- **Claims Management**
-  - Handles claim registration, validation, lifecycle transitions, and fraud indicators.
-  - Owns the Claim aggregate.
-
-- **Billing**
-  - Manages premium billing, payment schedules, and financial state tracking.
-
+- **Claims Management** (fraud intentionally excluded)
+- **Billing** (payment execution delegated to Stripe)
 - **Risk & Pricing**
-  - Responsible for risk evaluation and pricing logic.
-  - Provides pricing decisions to Policy Management but remains isolated from policy persistence.
 
-Each bounded context has its own model, rules, and persistence concerns, avoiding tight coupling and ambiguous responsibilities.
+### Aggregates
 
-### Aggregates and Entities
+- Policy Aggregate
+- Claim Aggregate
+- Billing Aggregate
 
-- **Policy Aggregate**
-  - Root entity: Policy
-  - Enforces invariants related to policy state, coverage eligibility, and versioning.
+## 8. Data Modeling
 
-- **Claim Aggregate**
-  - Root entity: Claim
-  - Controls claim state transitions and validation rules.
-
-- **Billing Aggregate**
-  - Root entity: Invoice or BillingAccount
-  - Ensures consistency of payment-related operations.
-
-### Ubiquitous Language
-
-A consistent domain language is used across code, documentation, and communication. Terms such as *Policy*, *Claim*, *Coverage*, *Endorsement*, and *Premium* have explicit definitions and are used consistently to prevent semantic drift and misunderstandings.
-
-
-## 8. Key Workflows
-
-This section describes the main business workflows supported by the system. The focus is on illustrating how responsibilities are distributed across layers and how complex domain rules are enforced over time.
-
-### Policy Issuance Workflow
-
-1. A request to issue a policy is received by the application layer.
-2. Authorization and role validation are performed.
-3. Risk data is collected and sent to the Risk & Pricing context.
-4. Pricing rules are evaluated and a premium is calculated.
-5. The Policy aggregate is created in a draft state.
-6. Domain validations are executed (coverage eligibility, business constraints).
-7. Upon successful validation, the policy transitions to an active state.
-8. A new immutable policy version is persisted.
-9. An audit log entry is recorded for traceability.
-
-### Policy Endorsement Workflow
-
-1. An endorsement request is received for an active policy.
-2. The current policy version is retrieved.
-3. Proposed changes are validated against business rules.
-4. A new policy version is created reflecting the endorsement.
-5. Historical versions remain unchanged.
-6. Audit logs capture the endorsement details and author.
-
-### Claim Processing Workflow
-
-1. A claim is registered and linked to an active policy.
-2. Initial validation checks are performed (coverage, policy status, dates).
-3. The claim transitions to a submitted state.
-4. Rule-based fraud indicators are evaluated.
-5. The claim moves through review, approval, or rejection states.
-6. Final settlement decisions are recorded.
-7. All state transitions are audited.
-
-### Billing Workflow
-
-1. Premium charges are generated based on policy terms.
-2. Invoices are issued and tracked.
-3.
-
-## 9. Data Modeling
-
-The data model is designed to reflect the core domain concepts and enforce business invariants rather than optimize for simplistic CRUD operations. Historical consistency, traceability, and correctness are prioritized over aggressive normalization or convenience.
-
-### Core Domain Entities
+### Core Entities
 
 #### Policy
-- Unique policy identifier
-- Policy number
-- Current status (Draft, Active, Cancelled, Expired)
-- Effective period (start and end dates)
-- Reference to the policyholder
-- Reference to the active policy version
-
-Policies are long-lived entities. Changes to a policy never overwrite existing data; instead, a new version is created.
+- Identifier
+- Status
+- Effective period
+- Active version reference
 
 #### Policy Version
-- Version identifier
-- Associated policy ID
-- Coverage definitions
-- Premium details
-- Creation timestamp
-- Author (user or system)
-
-Policy versions are immutable once created. This ensures full historical traceability.
+- Immutable
+- Coverage and premium snapshot
 
 #### Claim
-- Claim identifier
-- Associated policy ID
-- Associated policy version ID
-- Claim status (Submitted, In Review, Approved, Rejected, Settled)
-- Event date
-- Claim description
-- Fraud indicators (flags)
+- Linked to policy version
+- Lifecycle states
 
-Claims always reference the policy version that was active at the time of the insured event.
+#### Invoice
+- Financial obligation
+- Linked to policy version
 
-#### Billing / Invoice
-- Invoice identifier
-- Policy ID
-- Policy version ID
-- Amount
-- Due date
-- Payment status
-
-Billing data is linked to specific policy versions to ensure financial traceability.
+#### Payment Record
+- External reference (Stripe)
+- Internal reconciliation
 
 #### Audit Log
-- Event identifier
-- Entity type
-- Entity ID
-- Action performed
-- Timestamp
-- Actor (user or system)
-- Previous and new states (where applicable)
+- Immutable event history
 
-### Business Invariants
+## 9. Technology Decisions
 
-- A policy version cannot be modified once persisted.
-- Claims must reference an active policy version at the time of the event.
-- Invalid state transitions are prevented at the domain level.
-- Financial records must remain immutable after confirmation.
-
-### Persistence Considerations
-
-- Write operations favor strong consistency.
-- Read models may evolve independently for performance optimization.
-- Concurrency control is required to prevent conflicting updates.
-- Data structures are designed to support regulatory audits and historical reconstruction.
-
-
-## 10. Technology Decisions
-
-The technology stack is chosen to support the architectural goals of the system, particularly strong domain modeling, transactional consistency, and long-term maintainability.
-
-### Programming Language
-
-**Java**
-
-Java was selected due to its maturity, strong ecosystem, and suitability for large-scale, long-lived enterprise systems. Its type system and tooling support clear domain modeling and reduce accidental complexity in critical business logic.
-
-**Trade-offs:**
-- More verbose than some modern languages
-- Slower iteration compared to scripting languages
-- Stronger guarantees around correctness and maintainability
+### Language
+- **Java**
 
 ### Framework
-
-**Spring Boot**
-
-Spring Boot is used to support application wiring, dependency injection, and infrastructure concerns while keeping the domain layer framework-agnostic.
-
-**Trade-offs:**
-- Requires discipline to avoid framework leakage into the domain
-- Provides strong ecosystem support for security, transactions, and observability
+- **Spring Boot**
 
 ### Persistence
+- **Relational Database (PostgreSQL)**
 
-**Relational Database (e.g., PostgreSQL)**
-
-A relational database is assumed due to the need for strong consistency, transactional guarantees, and complex relational queries common in insurance systems.
-
-**Trade-offs:**
-- Horizontal scaling requires careful design
-- Strong consistency prioritized over availability for core operations
+### Payments
+- **Stripe** via infrastructure adapters
 
 ### Security
+- Spring Security
+- RBAC
 
-- Spring Security for authentication and authorization
-- Role-based access control enforced at application boundaries
+### Documentation
+- Markdown
+- C4-style diagrams
 
-### Documentation and Diagrams
-
-- Markdown for documentation
-- Architecture and flow diagrams using simple tools (e.g., C4-style diagrams)
-
-### Testing Approach
-
-- Unit tests focused on domain logic
-- Application tests for critical workflows
-- Emphasis on testing business invariants rather than technical details
-
-
+### Testing
+- Domain-focused unit tests
+- Workflow-oriented application tests
