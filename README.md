@@ -17,7 +17,7 @@ This repository documents the current progress of the project, including archite
 ### Repository Navigation
 
 - [`architecture/`](architecture/)
-- [`progress/`](progress/)
+- [`progress.md`](progress.md)
 
 This repository contains:
 
